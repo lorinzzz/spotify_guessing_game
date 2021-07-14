@@ -14,7 +14,6 @@ import urllib.request
 from PIL import ImageTk, Image
 import tkinter as tk
 
-
 class GuessingGame:
     def __init__(self):
         self.spotify_token = ""
@@ -30,6 +29,7 @@ class GuessingGame:
         self.device_id_arr = []
         self.current_device_id = ""
 
+    # find playlists and store the names and id into a list
     def find_playlists(self):
         query = "https://api.spotify.com/v1/me/playlists?limit=50"
         response = requests.get(query, headers={"Content-Type": "application/json", "Authorization": "Bearer {}".format(self.spotify_token)})
@@ -38,6 +38,7 @@ class GuessingGame:
             self.playlists.append(i["name"])
             self.playlist_id_arr.append(i["id"])          
 
+    # find songs from a playlist, and store all names and id into a list
     def find_songs(self):
         offset_tot = 1
         offset = 0
@@ -61,8 +62,10 @@ class GuessingGame:
 
         self.number_of_songs = len(self.tracks)
 
+    # refresh token handler 
     def call_refresh(self):
         refresh = 1
+        # check if refresh pickle file exists 
         file_exists = os.path.isfile('refresh.pckl')
         if file_exists:
             # get date from file and find how many minutes has passed 
@@ -90,21 +93,23 @@ class GuessingGame:
             self.spotify_token = os.environ.get('temp_token')
             print("Reusing previous access token!")
 
+    # refresh handler 
     def refresh(self):
         query = "https://accounts.spotify.com/api/token"
         response = requests.post(query,
                                  data={"grant_type": "refresh_token",
                                        "refresh_token": os.environ.get('refresh_token')},
-                                 headers={"Authorization": "Basic " + str(os.environ.get('base_64'))})
+                                 headers={"Authorization": "Basic " + os.environ.get('base_64')})
         response_json = response.json()
         return response_json["access_token"]
 
+    # change user with URL as input from user containing the auth code 
     def change_user(self, url = ""):
         # get a new refresh token, and save to .env
         new_token_caller = SignIn()
         os.environ['refresh_token'] = new_token_caller.get_token(url)
         dotenv.set_key(dotenv_file, "refresh_token", os.environ['refresh_token'])
-        # call refresh to get new temp access token, and refresh playlists afterwards
+        # call refresh to get new temp access token, pickle the refresh time, then find all devices and playlists from user
         self.spotify_token = self.refresh()
         os.environ['temp_token'] = self.spotify_token
         dotenv.set_key(dotenv_file, "temp_token", os.environ['temp_token'])
@@ -114,12 +119,12 @@ class GuessingGame:
         file.close
         self.find_playlists
         self.get_devices      
-    # play a random song from playlist
 
+    # play song from playlist
     def play_song(self, replay = 0):
         query = "https://api.spotify.com/v1/me/player/play?device_id={}".format(self.current_device_id)
         if replay == 4 or replay == 0 or replay == 5:
-            self.track_offset = random.randint(0, self.number_of_songs - 1)
+            self.track_offset = random.randint(0, self.number_of_songs - 1) # get random track 
             track_length = self.get_track_length()
             self.track_pos = random.randint(int(track_length * 0.1), track_length - int(track_length * 0.1)) # get a random pos in track, but avoiding the first and last 10% of the song
         elif replay == 3:
@@ -136,16 +141,19 @@ class GuessingGame:
         response_json = response.json()
         return response_json["duration_ms"]
 
+    # pause track
     def pause_track(self):    
         pause_query = "https://api.spotify.com/v1/me/player/pause"
         pause_response = requests.put(pause_query, headers={"Content-Type": "application/json", "Authorization": "Bearer {}".format(self.spotify_token)})
-
+    
+    # change playlist 
     def change_playlist(self, playlist_num = 0):
         self.playlist_id = self.playlist_id_arr[playlist_num]
         self.tracks = []
         self.track_id_arr = []
         self.find_songs()
     
+    # get all devices from user and store name and id into lists 
     def get_devices(self):
         query = "https://api.spotify.com/v1/me/player/devices"
         response = requests.get(query, headers={"Content-Type": "application/json", "Authorization": "Bearer {}".format(self.spotify_token)})
@@ -153,30 +161,36 @@ class GuessingGame:
         for x in response_json["devices"]:
             self.device_id_arr.append(x["id"])
             self.device_names.append(x["name"])
-        # default device id     
-        self.current_device_id = self.device_id_arr[0]
-    
+        # default device id    
+        if len(self.device_id_arr) != 0: 
+            self.current_device_id = self.device_id_arr[0]
+
+    # sets playing device        
     def set_device(self, device_id = ""):
         self.current_device_id = self.device_id_arr[self.device_names.index(device_id)]
 
+    # gets album art based on track in current playlist 
     def get_album_art(self, track_idx = 0):
         query = "https://api.spotify.com/v1/tracks/{}?market=US".format(self.track_id_arr[track_idx])
         response = requests.get(query, headers={"Content-Type": "application/json", "Authorization": "Bearer {}".format(self.spotify_token)})
         response_json = response.json()
         return response_json["album"]["images"][1]["url"]
 
+    # get artist name based on track in current playlist
     def get_artist(self, track_idx = 0):
         query = "https://api.spotify.com/v1/tracks/{}?market=US".format(self.track_id_arr[track_idx])
         response = requests.get(query, headers={"Content-Type": "application/json", "Authorization": "Bearer {}".format(self.spotify_token)})
         response_json = response.json()    
         return response_json["album"]["artists"][0]["name"]       
     
+    # returns the username of spotify account
     def get_user_name(self):
         query = "https://api.spotify.com/v1/me"
         response = requests.get(query, headers={"Content-Type": "application/json", "Authorization": "Bearer {}".format(self.spotify_token)})
         response_json = response.json()    
         return response_json["display_name"]            
 
+# function to handle the options of the music control buttons 
 def change_replay_val(replay):
     correct_ans_pic.place_forget()
     incorrect_ans_pic.place_forget()
@@ -202,6 +216,7 @@ def change_replay_val(replay):
     if replay == 4:
         advanceGame(current_song)
 
+# changes playlist, if play = 0 we are in the main menu, if play = 1 we are in game
 def set_playlist(value, play = 0):
     a.change_playlist(a.playlists.index(value))
     if play == 1:
@@ -213,13 +228,14 @@ def set_playlist(value, play = 0):
     t = Timer(play_length, a.pause_track)
     t.start()
 
-
+# fuction to handle the scoring, displayment of the correct answer, and whether the user answer was right or wrong
 def checkAnswer(mc_answer = "", current_song = "", idx = 0):
     global score
     global songs_correct
     global songs_played
     global penalty
     songs_played += 1
+    # get album art from curreont song
     urllib.request.urlretrieve(a.get_album_art(idx), "assets/art.png")
     art = ImageTk.PhotoImage(Image.open("assets/art.png"))
     album_pic.configure(image=art)
@@ -227,7 +243,7 @@ def checkAnswer(mc_answer = "", current_song = "", idx = 0):
     album_pic.place(x = 170, y = 160, anchor='center')
     if current_song == mc_answer:
         correct_ans_pic.place(x = 535, y = 110, anchor='center')
-        song_info.configure(text = current_song + " - " + a.get_artist(idx), wraplength = 300, bg = "black", fg = "green")
+        song_info.configure(text = current_song + " - " + a.get_artist(idx), wraplength = 300, bg = "black", fg = "green") # show correct answer in green
         song_info.place(x = 535, y = 250, anchor='center')
         correct_ans_pic.after(2000, lambda: change_replay_val(4))  
         score += (100 - penalty)
@@ -237,12 +253,13 @@ def checkAnswer(mc_answer = "", current_song = "", idx = 0):
         songs_correct_display.configure(text = "Songs Correct: " + str(songs_correct) + "/" + str(songs_played))      
     else:
         incorrect_ans_pic.place(x = 535, y = 110, anchor='center')
-        song_info.configure(text = current_song + " - " + a.get_artist(idx), wraplength = 300, bg = "black", fg = "red")
+        song_info.configure(text = current_song + " - " + a.get_artist(idx), wraplength = 300, bg = "black", fg = "red") # show correct answer in red
         song_info.place(x = 525, y = 250, anchor='center')
         incorrect_ans_pic.after(2000, lambda: change_replay_val(4))
         score_display.configure(text = "Score: " + str(score))
         songs_correct_display.configure(text = "Songs Correct: " + str(songs_correct) + "/" + str(songs_played))  
 
+# sets up multiple choice questions for every turn
 def advanceGame(current_song = ""):
     mc_questions = ["", "", "", "", "", ""]
     mc_song_name = ["", "", "", "", "", ""]
@@ -250,10 +267,12 @@ def advanceGame(current_song = ""):
     correct_mc_idx = random.randint(0,5)
     idx = 0
     unique = 0
+    # make sure we generate a random index that isn't the index of the current song
     while unique == 0:
         rand_idx = random.sample(range(0, a.number_of_songs - 1), 6)
         if current_song_idx not in rand_idx:
             unique = 1
+    # populate the question and song name arrays
     while idx < 6:
         if idx == correct_mc_idx:
             mc_questions[idx] = current_song + " - " + a.get_artist(current_song_idx)
@@ -270,15 +289,18 @@ def advanceGame(current_song = ""):
     mc5_button.configure(text = mc_questions[4], command = lambda: checkAnswer(mc_song_name[4], current_song, current_song_idx))
     mc6_button.configure(text = mc_questions[5], command = lambda: checkAnswer(mc_song_name[5], current_song, current_song_idx))
 
+# function to display initial screen for first time user setup
 def change_show_new_user():
     a.change_user(redirect_uri_entry.get())
     display_user_name.configure(text = "Username: " + a.get_user_name())
     display_user_name.place(x = 350, y = 550, anchor = "center")
+    # check if first_run flag is true 
     if os.environ.get('first_run') == '1': 
             os.environ['first_run'] = '0'
             dotenv.set_key(dotenv_file, "first_run", os.environ['first_run'])
             configure_button.place(x = 350, y = 450, anchor = "center")
 
+# function for configure button command
 def configure():
     hyperlink_button.place_forget()
     redirect_uri_entry.place_forget()
@@ -287,6 +309,7 @@ def configure():
     a.get_devices()
     to_main_menu()
 
+# function to reset the scoring values
 def resetValues():
     global score 
     global songs_correct
@@ -297,6 +320,7 @@ def resetValues():
     songs_played = 0 
     penalty = 0    
 
+# function to transition from the main menu to the start of the game
 def startGame():
     resetValues()
     start_button.place_forget()
@@ -316,11 +340,14 @@ def startGame():
     extend_and_replay_button.place(x = 266, y = 420, anchor='center')
     play_different_part_button.place(x = 434, y = 420, anchor='center')
     next_track_button.place(x = 600, y = 420, anchor='center')
+
+    # updae the playlist options
     var2.set('Change Playlist')
     change_playlist['menu'].delete(0, 'end')
     for x in a.playlists:
         change_playlist['menu'].add_command(label=x, command = tk._setit(var2, x, lambda x: set_playlist(var2.get(), 1)))
     change_playlist.place(x = 350, y = 780, anchor='center')
+
     reset_game.place(x = 655, y = 780, anchor='center')
     songs_correct_display.place(x = 550, y = 370, anchor='center')
     score_display.place(x = 150, y = 370, anchor='center')
@@ -335,9 +362,11 @@ def startGame():
     mc5_button.place(x = 200, y = 710, anchor='center')
     mc6_button.place(x = 500, y = 710, anchor='center')
 
+# function to open link for the link button in the configure screen
 def callback():
     webbrowser.open_new("https://accounts.spotify.com/en/authorize?client_id=f7030672f448481f85c1c90719ff5080&response_type=code&redirect_uri=https%3A%2F%2Fgoogle.com&scope=playlist-modify-public%20playlist-modify-private%20user-modify-playback-state%20playlist-read-private%20user-read-playback-state%20user-read-currently-playing%20playlist-read-collaborative")
 
+# function for command to return to main menu
 def to_main_menu():
     a.pause_track()
     resetValues()
@@ -348,12 +377,15 @@ def to_main_menu():
     enter_button.place(x = 500, y = 600, anchor='center')
     display_user_name.configure(text = "Username: " + a.get_user_name())
     display_user_name.place(x = 350, y = 550, anchor = "center")
+
+    # refresh the playlist options
     var1.set('Choose Playlist to Begin With')
     playlist_options['menu'].delete(0 , 'end')
     for x in a.playlists:
         playlist_options['menu'].add_command(label=x, command = tk._setit(var1, x, set_playlist))
     playlist_options.place(x = 350, y = 325, anchor = 'center')
     
+    # refresh the the device options
     var3.set('Choose Device to Begin With')
     device_options['menu'].delete(0 , 'end')
     for x in a.device_names:
@@ -380,7 +412,9 @@ def to_main_menu():
     change_playlist.place_forget()
     reset_game.place_forget()
 
+# instantiate GuessingGame class
 a = GuessingGame()
+# initialize lists to a single element list, the OptionsMenu requires that a list is not empty, so these two lines will satisfy the condition for the time being
 a.playlists = [""] 
 a.device_names = [""]
 
@@ -400,6 +434,7 @@ root.title("Spotify Guessing Game")
 canvas = tk.Canvas(root, height = 800, width = 700, bg = "BLACK")
 canvas.pack()
 
+#### label, button, and options menu declaration/placement/configuration ####
 configure_button = tk.Button(root, text="Configure", command = configure)
 welcome_text = tk.Label(text = "Spotify Guessing Game", font=("Helvetica", 32), bg = "white", fg = "black")
 playlist_info = tk.Label(text = "Playlist has 0 songs", font=("Helvetica", 24), bg = "black", fg = "white")
@@ -456,9 +491,11 @@ mc4_button = tk.Button(root, wraplength=250, height = 3, width = 20, font=("Helv
 mc5_button = tk.Button(root, wraplength=250, height = 3, width = 20, font=("Helvetica", 16))
 mc6_button = tk.Button(root, wraplength=250, height = 3, width = 20, font=("Helvetica", 16))
 
+#### end label, button, and options menu declaration/placement/configuration ####
 
 a.playlists = []
 a.device_names = []
+# handles if the app was run for the first time
 if os.environ.get('first_run') == '1':   
     hyperlink_button.place(x = 200, y = 400, anchor='center')
     redirect_uri_entry.place(x = 350, y = 400, height = 25, width = 250, anchor='center')
